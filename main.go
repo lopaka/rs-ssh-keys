@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"log/syslog"
 	"os"
 	"os/user"
 	"regexp"
@@ -32,12 +33,18 @@ func searchFile(file string, username string) string {
 
 func main() {
 
+	// Log to syslog with LOG_AUTH facility
+	logger, err := syslog.New(syslog.LOG_AUTH, "rs-ssh-keys")
+	if err != nil {
+		log.Fatal("exit")
+	}
+
 	keys := ""
 
 	// Read in username argument
 	args := os.Args
 	if len(args) != 2 {
-		fmt.Println("single username argument required")
+		logger.Warning("username was not provided and is required")
 		os.Exit(1)
 	}
 	username := args[1]
@@ -56,14 +63,18 @@ func main() {
 		systemUsername, err := user.Lookup(username)
 		// This should return at least our user. If nothing or error is returned, exit with no keys.
 		if err != nil {
+			logger.Warning(fmt.Sprintf("issue searching for username '%s': %s", username, err.Error()))
 			os.Exit(1)
 		}
 		if policyFileUsername[3] == systemUsername.Uid {
 			// User is from policyFile so get and set keys
+			logger.Info(fmt.Sprintf("username '%s' matches entry in login policy", username))
 			// Currently, keys are the in the 6th and on location in the array (starting with 0)
 			for i := 6; i < len(policyFileUsername); i++ {
 				keys = keys + policyFileUsername[i] + "\n"
 			}
+		} else {
+			logger.Warning(fmt.Sprintf("username '%s' matches another NSS method - not using login policy keys", username))
 		}
 	}
 
